@@ -1,0 +1,248 @@
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+class Rectangle {
+    public double x; 
+    public double y; 
+    public double width;
+    public double height;
+
+    public Rectangle(double x, double y, double width, double height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+    }
+
+    public boolean contains(double px, double py) {
+        return (px >= x && px <= x + width && py >= y && py <= y + height);
+    }
+
+    @Override
+    public String toString() {
+        return "Rectangle(" + x + ", " + y + ", " + width + ", " + height + ")";
+    }
+}
+
+abstract class Node {
+    protected double x, y, width, height;
+
+    public Node(double x, double y, double width, double height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+    }
+
+    public abstract void insert(Rectangle rect);
+    public abstract Rectangle find(double px, double py);
+    public abstract void delete(double px, double py);
+    public abstract void update(double px, double py, double newWidth, double newHeight);
+    public abstract void dump(List<Rectangle> rectangles);
+    public abstract boolean contains(Rectangle rect);
+}
+
+class QuadTree {
+    private LeafNode root;
+
+    public QuadTree(double x, double y, double width, double height) {
+        this.root = new LeafNode(x, y, width, height);
+    }
+
+    public void insert(Rectangle rect) {
+        root.insert(rect);
+    }
+
+    public Rectangle find(double px, double py) {
+        return root.find(px, py);
+    }
+
+    public void delete(double px, double py) {
+        root.delete(px, py);
+    }
+
+    public void update(double px, double py, double newWidth, double newHeight) {
+        root.update(px, py, newWidth, newHeight);
+    }
+
+    public List<Rectangle> dump() {
+        List<Rectangle> rectangles = new ArrayList<>();
+        root.dump(rectangles);
+        return rectangles;
+    }
+}
+
+class LeafNode extends Node {
+    private static final int MAX_RECTANGLES = 4;
+    private List<Rectangle> rectangles = new ArrayList<>();
+    private Node[] children;
+
+    public LeafNode(double x, double y, double width, double height) {
+        super(x, y, width, height);
+    }
+
+    @Override
+    public void insert(Rectangle rect) {
+        if (!contains(rect)) {
+            System.out.println("Rectangle does not fit: " + rect);
+            return;
+        }
+
+        if (rectangles.size() < MAX_RECTANGLES) {
+            rectangles.add(rect);
+        } else {
+            if (children == null) {
+                subdivide();
+            }
+            for (Node child : children) {
+                if (child.contains(rect)) {
+                    child.insert(rect);
+                    return;
+                }
+            }
+        }
+    }
+
+    private void subdivide() {
+        double halfWidth = width / 2;
+        double halfHeight = height / 2;
+
+        children = new Node[4];
+        children[0] = new LeafNode(x, y, halfWidth, halfHeight); 
+        children[1] = new LeafNode(x + halfWidth, y, halfWidth, halfHeight); 
+        children[2] = new LeafNode(x, y + halfHeight, halfWidth, halfHeight); 
+        children[3] = new LeafNode(x + halfWidth, y + halfHeight, halfWidth, halfHeight);
+
+        for (Rectangle rect : rectangles) {
+            for (Node child : children) {
+                if (child.contains(rect)) {
+                    child.insert(rect);
+                    break;
+                }
+            }
+        }
+        rectangles.clear();
+    }
+
+    @Override
+    public Rectangle find(double px, double py) {
+        for (Rectangle rect : rectangles) {
+            if (rect.contains(px, py)) {
+                return rect;
+            }
+        }
+        if (children != null) {
+            for (Node child : children) {
+                if (child.contains(new Rectangle(px, py, 0, 0))) {
+                    return child.find(px, py);
+                }
+            }
+        }
+        return null;
+    } 
+
+    @Override
+    public void delete(double px, double py) {
+        rectangles.removeIf(rect -> rect.contains(px, py));
+        if (children != null) {
+            for (Node child : children) {
+                if (child.contains(new Rectangle(px, py, 0, 0))) {
+                    child.delete(px, py);
+                    return;
+                }
+            }
+        }
+    }
+
+    @Override
+    public void update(double px, double py, double newWidth, double newHeight) {
+        Rectangle rectToUpdate = find(px, py);
+        if (rectToUpdate != null) {
+            delete(px, py);
+            insert(new Rectangle(px, py, newWidth, newHeight));
+        }
+    }
+
+    @Override
+    public void dump(List<Rectangle> rectangles) {
+        rectangles.addAll(this.rectangles);
+        if (children != null) {
+            for (Node child : children) {
+                child.dump(rectangles);
+            }
+        }
+    }
+
+    @Override
+    public boolean contains(Rectangle rect) {
+        return (rect.x >= x && rect.x + rect.width <= x + width &&
+                rect.y >= y && rect.y + rect.height <= y + height);
+    }
+}
+
+// Main class
+public class Project2 {
+    public static void main(String[] args) {
+        if (args.length == 0) {
+            System.out.println("");
+            return;
+        }
+
+        QuadTree quadTree = new QuadTree(0, 0, 500, 500);
+
+        try (BufferedReader br = new BufferedReader(new FileReader(args[0]))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] tokens = line.split(" ");
+                String command = tokens[0];
+
+                //commands
+                switch (command) {
+                    case "Insert":
+                        double x = Double.parseDouble(tokens[1]);
+                        double y = Double.parseDouble(tokens[2]);
+                        double width = Double.parseDouble(tokens[3]);
+                        double height = Double.parseDouble(tokens[4]);
+                        quadTree.insert(new Rectangle(x, y, width, height));
+                        break;
+
+                    case "Find":
+                        x = Double.parseDouble(tokens[1]);
+                        y = Double.parseDouble(tokens[2]);
+                        Rectangle found = quadTree.find(x, y);
+                        System.out.println(found != null ? "Found: " + found : "Not Found");
+                        break;
+
+                    case "Delete":
+                        x = Double.parseDouble(tokens[1]);
+                        y = Double.parseDouble(tokens[2]);
+                        quadTree.delete(x, y);
+                        break;
+
+                    case "Update":
+                        x = Double.parseDouble(tokens[1]);
+                        y = Double.parseDouble(tokens[2]);
+                        double newWidth = Double.parseDouble(tokens[3]);
+                        double newHeight = Double.parseDouble(tokens[4]);
+                        quadTree.update(x, y, newWidth, newHeight);
+                        break;
+
+                    case "Dump":
+                        List<Rectangle> rectangles = quadTree.dump();
+                        for (Rectangle rect : rectangles) {
+                            System.out.println(rect);
+                        }
+                        break;
+
+                    default:
+                        System.out.println("Unknown command: " + command);
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
